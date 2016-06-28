@@ -105,13 +105,30 @@ void ext_main(void *r)
 	CLASS_ATTR_SAVE(c, "trackmouse", 0);
 	CLASS_ATTR_CATEGORY(c, "trackmouse", 0, "Behavior");
     
+    CLASS_ATTR_LONG(c, "numMoshers", 0, t_moshpit, numMoshers);
+    CLASS_ATTR_STYLE_LABEL(c, "numMoshers", 0, 0, "Number of Moshers");
+    //CLASS_ATTR_SAVE(c, "numMoshers", 0);
+    CLASS_ATTR_CATEGORY(c, "numMoshers", 0, "moshpit");
+    
+    CLASS_ATTR_DOUBLE(c, "noise", 0, t_moshpit, noise);
+    CLASS_ATTR_STYLE_LABEL(c, "noise", 0, 0, "noise");
+    //CLASS_ATTR_SAVE(c, "noise", 0);
+    CLASS_ATTR_CATEGORY(c, "noise", 0, "moshpit");
+    
+    CLASS_ATTR_DOUBLE(c, "flock", 0, t_moshpit, flock);
+    CLASS_ATTR_STYLE_LABEL(c, "flock", 0, 0, "flock");
+    //CLASS_ATTR_SAVE(c, "flock", 0);
+    CLASS_ATTR_CATEGORY(c, "flock", 0, "moshpit");
+    
     CLASS_ATTR_CHAR(c, "showforce", 0, t_moshpit, showforce);
     CLASS_ATTR_STYLE_LABEL(c, "showforce", 0, "onoff", "Show Force");
-    CLASS_ATTR_SAVE(c, "showforce", 0);
+    //CLASS_ATTR_SAVE(c, "showforce", 0);
+    CLASS_ATTR_CATEGORY(c, "showforce", 0, "moshpit");
     
     CLASS_ATTR_LONG(c, "boxsize", 0, t_moshpit, lx);
     CLASS_ATTR_STYLE_LABEL(c, "boxsize", 0, 0, "Box Size");
-    CLASS_ATTR_SAVE(c, "boxsize", 0);
+    //CLASS_ATTR_SAVE(c, "boxsize", 0);
+    CLASS_ATTR_CATEGORY(c, "boxsize", 0, "moshpit");
 
 	CLASS_STICKY_ATTR(c, "category", 0, "Color");
 	CLASS_ATTR_RGBA(c, "bgcolor", 0, t_moshpit, u_background);
@@ -302,7 +319,7 @@ void moshpit_update(t_moshpit *x) {
         //Some keys stuff here, which I ignored
         x->colavg += x->col[i];
     }
-    for (int i = 0; i < numMoshers; ++i) {
+    for (int i = 0; i < x->numMoshers; ++i) {
         x->vx[i] += x->fx[i] * GDT;
         x->vy[i] += x->fy[i] * GDT;
         x->mpX[i] += x->vx[i] * GDT;
@@ -345,14 +362,14 @@ void moshpit_update(t_moshpit *x) {
 
         
     }
-    x->colavg /= numMoshers;
+    x->colavg /= x->numMoshers;
 }
 
 void moshpit_draw_all(t_moshpit *x, t_rect rect, t_jgraphics *g) {
     double sx = rect.width/x->lx;
     double sy = rect.height/x->ly;
     double ss = sqrt(sx*sy);
-    for (int i = 0; i < numMoshers; ++i) {
+    for (int i = 0; i < x->numMoshers; ++i) {
         if (x->type[i] == 0) {
             if (x->showforce == 1) {
                 double cr = fabs(x->col[i]/25);
@@ -489,7 +506,7 @@ void moshpit_free(t_moshpit *x)
 }
 
 void init_empty(t_moshpit *x) {
-    for (int i = 0; i < numMoshers; ++i) {
+    for (int i = 0; i < x->numMoshers; ++i) {
         x->r[i] = 0.;
         x->mpX[i] = 0.;
         x->mpY[i] = 0.;
@@ -502,8 +519,8 @@ void init_empty(t_moshpit *x) {
     }
 }
 
-long calc_sidelength() {
-    return floor(1.03 * sqrt(M_PI * RADIUS * RADIUS * numMoshers));
+long calc_sidelength(t_moshpit *x) {
+    return floor(1.03 * sqrt(M_PI * RADIUS * RADIUS * x->numMoshers));
 }
 
 void init_sidelength(t_moshpit *x, long L) {
@@ -522,7 +539,7 @@ void init_sidelength(t_moshpit *x, long L) {
 }
 
 void init_circle (t_moshpit *x) {
-    for (int i = 0; i < numMoshers; ++i) {
+    for (int i = 0; i < x->numMoshers; ++i) {
         double tx = x->lx * normRand();
         double ty = x->ly * normRand();
         
@@ -587,7 +604,7 @@ void *moshpit_new(t_symbol *s, long argc, t_atom *argv)
     x->noise = 3.0;
     x->showforce = 0;
     init_empty(x);
-    init_sidelength(x, calc_sidelength());
+    init_sidelength(x, calc_sidelength(x));
     init_circle(x);
     x->m_clock = clock_new((t_object *)x, (method)moshpit_task);
 	x->u_out = intout((t_object *)x);
