@@ -12,12 +12,11 @@
 #define DAMP 1.0
 #define GDT 0.1
 #define FRAC 0.15
-#define FRAMESKIP 3
 
 typedef struct _moshpit
 {
 	t_jbox u_box;						// header for UI objects
-	void *u_out;						// outlet pointer
+	void *m_out;						// outlet pointer
 	long u_state;						// state (1 or 0)
 	char u_mouseover;					// is mouse over the object
 	char u_mousedowninside;				// is mouse down within the object
@@ -41,6 +40,8 @@ typedef struct _moshpit
     double r[ARRAY_SIZE];
     long type[ARRAY_SIZE];
     double colavg;
+    long frameskip;
+    long framerate;
     
     //neighborlist
     long lx;
@@ -69,9 +70,10 @@ void moshpit_mouseup(t_moshpit *x, t_object *patcherview, t_pt pt, long modifier
 void moshpit_mouseenter(t_moshpit *x, t_object *patcherview, t_pt pt, long modifiers);
 void moshpit_mouseleave(t_moshpit *x, t_object *patcherview, t_pt pt, long modifiers);
 void moshpit_mousemove(t_moshpit *x, t_object *patcherview, t_pt pt, long modifiers);
+void init_sidelength(t_moshpit *x, long L);
+void init_circle (t_moshpit *x);
 void moshpit_bang(t_moshpit *x);
 void moshpit_int(t_moshpit *x, long n);
-
 
 static t_class *s_moshpit_class;
 
@@ -120,6 +122,16 @@ void ext_main(void *r)
     //CLASS_ATTR_SAVE(c, "flock", 0);
     CLASS_ATTR_CATEGORY(c, "flock", 0, "moshpit");
     
+    CLASS_ATTR_LONG(c, "frameskip", 0, t_moshpit, frameskip);
+    CLASS_ATTR_STYLE_LABEL(c, "frameskip", 0, 0, "frames between renders");
+    //CLASS_ATTR_SAVE(c, "flock", 0);
+    CLASS_ATTR_CATEGORY(c, "frameskip", 0, "moshpit");
+    
+    CLASS_ATTR_LONG(c, "framerate", 0, t_moshpit, framerate);
+    CLASS_ATTR_STYLE_LABEL(c, "framerate", 0, 0, "ms between renders");
+    //CLASS_ATTR_SAVE(c, "flock", 0);
+    CLASS_ATTR_CATEGORY(c, "framerate", 0, "moshpit");
+    
     CLASS_ATTR_CHAR(c, "showforce", 0, t_moshpit, showforce);
     CLASS_ATTR_STYLE_LABEL(c, "showforce", 0, "onoff", "Show Force");
     //CLASS_ATTR_SAVE(c, "showforce", 0);
@@ -152,7 +164,6 @@ void ext_main(void *r)
 	CLASS_ATTR_STYLE_LABEL(c,"color",0,"rgba","Check Color");
 
 	CLASS_STICKY_ATTR_CLEAR(c, "category");
-
 
 	CLASS_ATTR_DEFAULT(c,"patching_rect",0, "0. 0. 200. 200.");
 
@@ -208,7 +219,7 @@ double moshpit_calc_vorticity(t_moshpit *x) {
     long count = 0;
     
     for (int i = 0; i < x->numMoshers; ++i) {
-        if (x->type[i] == 1) {
+        if (x->type[i] > 0) {
             cmx += x->mpX[i];
             cmy += x->mpY[i];
             count++;
@@ -218,7 +229,7 @@ double moshpit_calc_vorticity(t_moshpit *x) {
     cmy /= count;
     
     for (int i = 0; i < x->numMoshers; ++i) {
-        if (x->type[i] == 1) {
+        if (x->type[i] > 0) {
             double tx = x->mpX[i] - cmx;
             double ty = x->mpY[i] - cmy;
             vor += (x->vx[i] * ty) - (x->vy[i] * tx);
@@ -287,7 +298,7 @@ void moshpit_update(t_moshpit *x) {
                             double tcol = c0*c0*dx*dx + c0*c0*dy*dy; //fx[i]*fx[i] + fy[i]*fy[i]
                             x->col[i] += tcol;
                         }
-                        if (x->type[i] == 1 && x->type[j] == 1 && l > 1e-6 && l < FR) {
+                        if (x->type[i] > 0 && x->type[j] > 0 && l > 1e-6 && l < FR) {
                             wx += x->vx[j];
                             wy += x->vy[j];
                             neigh++;
@@ -297,13 +308,13 @@ void moshpit_update(t_moshpit *x) {
             }
         }
         double wlen = (wx*wx + wy*wy);
-        if (x->type[i] == 1 && neigh > 0 && wlen > 1e-6) {
+        if (x->type[i] > 0 && neigh > 0 && wlen > 1e-6) {
             x->fx[i] += x->flock * wx / wlen;
             x->fy[i] += x->flock * wy /wlen;
         }
         double vlen = x->vx[i]*x->vx[i] + x->vy[i]*x->vy[i];
         double vhap = 0.;
-        if (x->type[i] == 1) {
+        if (x->type[i] > 0) {
             vhap = VHAPPY;
         } else {
             vhap = 0.;
@@ -312,7 +323,7 @@ void moshpit_update(t_moshpit *x) {
             x->fx[i] += DAMP*(vhap - vlen)*x->vx[i]/vlen;
             x->fy[i] += DAMP*(vhap - vlen)*x->vy[i]/vlen;
         }
-        if (x->type[i] == 1) {
+        if (x->type[i] > 0) {
             x->fx[i] += x->noise * (normRand()-0.5);
             x->fy[i] += x->noise * (normRand()-0.5);
         }
@@ -369,21 +380,39 @@ void moshpit_draw_all(t_moshpit *x, t_rect rect, t_jgraphics *g) {
     double sx = rect.width/x->lx;
     double sy = rect.height/x->ly;
     double ss = sqrt(sx*sy);
+    double cr = 0.;
     for (int i = 0; i < x->numMoshers; ++i) {
+        cr = fabs(x->col[i]/25);
+        if (cr < 0.) {
+            cr = 0.0;
+        } else if (cr > 1.) {
+            cr = 1.0;
+        }
         if (x->type[i] == 0) {
             if (x->showforce == 1) {
-                double cr = fabs(x->col[i]/25);
-                if (cr < 0.) {
-                    cr = 0.0;
-                } else if (cr > 1.) {
-                    cr = 1.0;
-                }
                 jgraphics_set_source_rgba(g, cr, cr, cr, 0.8);
             } else {
                 jgraphics_set_source_jrgba(g, &x->u_grey);
             }
+        } else if (x->type[i] == 2) {
+            if (x->showforce == 1) {
+                jgraphics_set_source_rgba(g, 1., 1., 0., cr);
+            } else {
+                jgraphics_set_source_rgba(g, 1., 1., 0., 0.8);
+            }
         } else {
-            jgraphics_set_source_jrgba(g, &x->u_red);
+            if (x->showforce == 1) {
+                jgraphics_set_source_rgba(g, 1., 0., 0., 0.8);
+            } else {
+                jgraphics_set_source_jrgba(g, &x->u_red);
+            }
+        }
+        if (x->type[i] == 2) {
+            t_atom outList[3];
+            atom_setlong(outList, sx*x->mpX[i]);
+            atom_setlong(outList+1, sy*x->mpY[i]);
+            atom_setlong(outList+2, cr*100);
+            outlet_list(x->m_out,0L, 3, outList);
         }
         jgraphics_set_line_width(g, 1.);
         jgraphics_arc(g, sx*x->mpX[i], sy*x->mpY[i], ss*x->r[i], 0, 2*M_PI);
@@ -405,44 +434,15 @@ void moshpit_paint(t_moshpit *x, t_object *patcherview)
 	jgraphics_stroke(g);
     
     nbl_bin(x);
-    for (int i = 0; i < FRAMESKIP; ++i) {
+    for (int i = 0; i < x->frameskip; ++i) {
         moshpit_update(x);
     }
     moshpit_draw_all(x, rect, g);
-    
-    
-    /*
-	// paint "inner highlight" to indicate mouseover
-	if (x->u_mouseover && !x->u_mousedowninside) {
-		jgraphics_set_source_jrgba(g, &x->u_hilite);
-		jgraphics_set_line_width(g, 1.);
-		jgraphics_rectangle(g, 1., 1., rect.width - 2, rect.height - 2);
-		jgraphics_stroke(g);
-	}
-	if (x->u_mousedowninside && !x->u_state) {		// paint hilite color
-		jgraphics_set_source_jrgba(g, &x->u_hilite);
-		jgraphics_rectangle(g, 1., 1., rect.width - 2, rect.height - 2);
-		jgraphics_fill(g);
-	}
-
-	// paint "check" (actually a filled rectangle) if state is on
-	if (x->u_state) {
-		t_jrgba col;
-
-		jbox_get_color((t_object *)x, &col);
-		jgraphics_set_source_jrgba(g, &col);
-		if (x->u_mousedowninside)		// make rect bigger if mouse is down and we are unchecking
-			jgraphics_rectangle(g, 3., 3., rect.width - 6, rect.height - 6);
-		else
-			jgraphics_rectangle(g, 4., 4., rect.width - 8, rect.height - 8);
-		jgraphics_fill(g);
-	}
-     */
 }
 
 void moshpit_task(t_moshpit *x){
     jbox_redraw((t_jbox *)x);
-    clock_fdelay(x->m_clock, 1.);
+    clock_fdelay(x->m_clock, x->framerate);
 }
 
 // mouse interaction
@@ -476,12 +476,6 @@ void moshpit_mouseleave(t_moshpit *x, t_object *patcherview, t_pt pt, long modif
 void moshpit_mousemove(t_moshpit *x, t_object *patcherview, t_pt pt, long modifiers)
 {
 	// nothing to do here, but could track mouse position inside object
-}
-
-void moshpit_bang(t_moshpit *x)
-{
-	outlet_int(x->u_out, x->u_state);
-    jbox_redraw((t_jbox *)x);
 }
 
 void moshpit_int(t_moshpit *x, long n)
@@ -539,6 +533,7 @@ void init_sidelength(t_moshpit *x, long L) {
 }
 
 void init_circle (t_moshpit *x) {
+    bool uniq = true;
     for (int i = 0; i < x->numMoshers; ++i) {
         double tx = x->lx * normRand();
         double ty = x->ly * normRand();
@@ -552,7 +547,8 @@ void init_circle (t_moshpit *x) {
         bool doCircle = true;
         if (doCircle) {
             if (dd < rad) {
-                x->type[i] = 1;
+                x->type[i] = (uniq) ? 2 : 1;
+                uniq = false;
             }
         } else {
             if ( normRand() < FRAC ) {
@@ -562,6 +558,14 @@ void init_circle (t_moshpit *x) {
         x->vx[i] = VHAPPY * (normRand() - 0.5);
         x->vy[i] = VHAPPY * (normRand() - 0.5);
     }
+}
+
+void moshpit_bang(t_moshpit *x)
+{
+    init_empty(x);
+    init_sidelength(x, calc_sidelength(x));
+    init_circle(x);
+    jbox_redraw((t_jbox *)x);
 }
 
 void *moshpit_new(t_symbol *s, long argc, t_atom *argv)
@@ -603,11 +607,13 @@ void *moshpit_new(t_symbol *s, long argc, t_atom *argv)
     x->flock = 1.0;
     x->noise = 3.0;
     x->showforce = 0;
+    x->frameskip = 2;
+    x->framerate = 30;
     init_empty(x);
     init_sidelength(x, calc_sidelength(x));
     init_circle(x);
     x->m_clock = clock_new((t_object *)x, (method)moshpit_task);
-	x->u_out = intout((t_object *)x);
+	x->m_out = listout((t_object *)x);
 	attr_dictionary_process(x,d);
 	jbox_ready((t_jbox *)x);
 	return x;
