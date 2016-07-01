@@ -128,7 +128,7 @@ void ext_main(void *r)
     CLASS_ATTR_CATEGORY(c, "frameskip", 0, "moshpit");
     
     CLASS_ATTR_LONG(c, "framerate", 0, t_moshpit, framerate);
-    CLASS_ATTR_STYLE_LABEL(c, "framerate", 0, 0, "ms between renders");
+    CLASS_ATTR_STYLE_LABEL(c, "framerate", 0, 0, "frames per second");
     //CLASS_ATTR_SAVE(c, "flock", 0);
     CLASS_ATTR_CATEGORY(c, "framerate", 0, "moshpit");
     
@@ -169,6 +169,11 @@ void ext_main(void *r)
 
 	class_register(CLASS_BOX, c);
 	s_moshpit_class = c;
+    
+    post("moshpit v0.1 (1 July 2016) by Michael Zbyszyński ©2016");
+    post("This work is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 3.0 License");
+    post("To view a copy of this license, visit http://creativecommons.org/licenses/by-nc-sa/3.0/");
+
 }
 
 void moshpit_assist(t_moshpit *x, void *b, long m, long a, char *s)
@@ -402,7 +407,7 @@ void moshpit_draw_all(t_moshpit *x, t_rect rect, t_jgraphics *g) {
             }
         } else {
             if (x->showforce == 1) {
-                jgraphics_set_source_rgba(g, 1., 0., 0., 0.8);
+                jgraphics_set_source_rgba(g, 1., 0., 0., cr);
             } else {
                 jgraphics_set_source_jrgba(g, &x->u_red);
             }
@@ -442,7 +447,7 @@ void moshpit_paint(t_moshpit *x, t_object *patcherview)
 
 void moshpit_task(t_moshpit *x){
     jbox_redraw((t_jbox *)x);
-    clock_fdelay(x->m_clock, x->framerate);
+    clock_fdelay(x->m_clock, floor(1000/x->framerate));
 }
 
 // mouse interaction
