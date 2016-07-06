@@ -17,6 +17,7 @@ typedef struct _moshpit
 {
 	t_jbox u_box;						// header for UI objects
 	void *m_out;						// outlet pointer
+    void *m_out2;
 	long u_state;						// state (1 or 0)
 	char u_mouseover;					// is mouse over the object
 	char u_mousedowninside;				// is mouse down within the object
@@ -25,6 +26,7 @@ typedef struct _moshpit
 	t_jrgba u_background;
 	t_jrgba u_grey;
     t_jrgba u_red;
+    char m_drawing;
     
     void *m_clock;
     
@@ -137,6 +139,12 @@ void ext_main(void *r)
     //CLASS_ATTR_SAVE(c, "showforce", 0);
     CLASS_ATTR_CATEGORY(c, "showforce", 0, "moshpit");
     
+    
+    CLASS_ATTR_CHAR(c, "drawing", 0, t_moshpit, m_drawing);
+    CLASS_ATTR_STYLE_LABEL(c, "drawing", 0, "onoff", "Draw Circles");
+    //CLASS_ATTR_SAVE(c, "showforce", 0);
+    CLASS_ATTR_CATEGORY(c, "drawing", 0, "moshpit");
+    
     CLASS_ATTR_LONG(c, "boxsize", 0, t_moshpit, lx);
     CLASS_ATTR_STYLE_LABEL(c, "boxsize", 0, 0, "Box Size");
     //CLASS_ATTR_SAVE(c, "boxsize", 0);
@@ -170,7 +178,7 @@ void ext_main(void *r)
 	class_register(CLASS_BOX, c);
 	s_moshpit_class = c;
     
-    post("moshpit v0.1 (1 July 2016) by Michael Zbyszyński ©2016");
+    post("moshpit v0.2 (6 July 2016) by Michael Zbyszyński ©2016");
     post("This work is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 3.0 License");
     post("To view a copy of this license, visit http://creativecommons.org/licenses/by-nc-sa/3.0/");
 
@@ -419,10 +427,19 @@ void moshpit_draw_all(t_moshpit *x, t_rect rect, t_jgraphics *g) {
             atom_setlong(outList+2, cr*100);
             outlet_list(x->m_out,0L, 3, outList);
         }
+        t_atom outList[5];
+        atom_setlong(outList, i);
+        atom_setlong(outList+1, x->type[i]);
+        atom_setlong(outList+2, sx*x->mpX[i]);
+        atom_setlong(outList+3, sy*x->mpY[i]);
+        atom_setlong(outList+4, cr*100);
+        outlet_list(x->m_out2,0L, 5, outList);
         jgraphics_set_line_width(g, 1.);
         jgraphics_arc(g, sx*x->mpX[i], sy*x->mpY[i], ss*x->r[i], 0, 2*M_PI);
-        jgraphics_fill(g);
-        jgraphics_stroke(g);
+        //jgraphics_fill(g);
+        if (x->m_drawing == 1) {
+            jgraphics_fill(g);
+        }
     }
 }
 
@@ -436,7 +453,9 @@ void moshpit_paint(t_moshpit *x, t_object *patcherview)
 	jgraphics_set_source_jrgba(g, &x->u_outline);
 	jgraphics_set_line_width(g, 1.);
 	jgraphics_rectangle(g, 0., 0., rect.width, rect.height);
-	jgraphics_stroke(g);
+    if (x->m_drawing) {
+        jgraphics_stroke(g);
+    }
     
     nbl_bin(x);
     for (int i = 0; i < x->frameskip; ++i) {
@@ -614,11 +633,13 @@ void *moshpit_new(t_symbol *s, long argc, t_atom *argv)
     x->showforce = 0;
     x->frameskip = 2;
     x->framerate = 30;
+    x->m_drawing = 1;
     init_empty(x);
     init_sidelength(x, calc_sidelength(x));
     init_circle(x);
     x->m_clock = clock_new((t_object *)x, (method)moshpit_task);
-	x->m_out = listout((t_object *)x);
+    x->m_out2 = listout((t_object *)x);
+    x->m_out = listout((t_object *)x);
 	attr_dictionary_process(x,d);
 	jbox_ready((t_jbox *)x);
 	return x;
