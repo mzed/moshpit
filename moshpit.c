@@ -3,6 +3,7 @@
 #include "jpatcher_api.h"
 #include "jgraphics.h"
 
+
 #define ARRAY_SIZE 1024
 #define NMAX 50
 #define RADIUS 1.0
@@ -12,6 +13,7 @@
 #define DAMP 1.0
 #define GDT 0.1
 #define FRAC 0.15
+#define M_PI 3.14159265358979323846
 
 typedef struct _moshpit
 {
